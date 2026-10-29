@@ -49,8 +49,7 @@ public final class NavigationNotificationListener extends NotificationListenerSe
         handler.removeCallbacks(refreshTask);
         if (!connected || !bridge().enabled()) return;
         try {
-            NavigationParser.Result best = null;
-            long newest = Long.MIN_VALUE;
+            NavigationCandidateSelector candidates = new NavigationCandidateSelector();
             String lastRaw = "";
             long rawTime = Long.MIN_VALUE;
             int count = 0, readable = 0;
@@ -71,11 +70,9 @@ public final class NavigationNotificationListener extends NotificationListenerSe
                     rawTime = sbn.getPostTime();
                 }
                 NavigationParser.Result result = NavigationParser.parse(sbn.getPackageName(), sbn.isOngoing(), fields);
-                if (result != null && sbn.getPostTime() >= newest) {
-                    best = result;
-                    newest = sbn.getPostTime();
-                }
+                candidates.consider(result, sbn.getPostTime());
             }
+            NavigationParser.Result best = candidates.selected();
             bridge().lastAmapText = lastRaw.isEmpty() ? "没有可读取的高德通知文字" : lastRaw;
             bridge().notificationChecked(count, readable, best);
             bridge().updateFromNotifications(best);

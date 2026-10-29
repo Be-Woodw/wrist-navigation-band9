@@ -6,7 +6,7 @@
 
 `band9/src/common/protocol.js` 与上游完全相同，Git blob SHA 为 `b8718a71fff42ed9a34531f81fed69ee32e514cb`；解码、4096 字符限制、session/seq 去重、20秒传输过期和状态展示语义沿用上游。
 
-`android/app/src/` 完全不改。`android/app/build.gradle` 的 `-Pband9` 仅影响 applicationId、版本和签名路径，namespace 与所有业务类保持原样。
+高德通知解析器、SendPolicy、WearBridge、后台同步、消息协议保持原版。2026-10-29 实机发现高德同时发布“82米后直行”和“正在为您步行导航”两类通知：原监听器单纯按 `getPostTime()` 选择，较新的通用状态可能遮蔽转向指令。因此仅在 `NavigationNotificationListener.java` 中使用纯 Java `NavigationCandidateSelector` 对候选排序（方向+距离 > 方向 > 通用状态；明确结束通知在时间晚于指令时优先），并增加 JUnit 回归测试。通知字段提取及 `NavigationParser.java` 不修改；若自定义通知的真实文字不在 Android 标准字段中，本次修复仍无法读取，须由实机日志验证。`android/app/build.gradle` 的 `-Pband9` 只影响 applicationId、版本和签名路径。
 
 ## 2. 提醒规则
 
@@ -89,3 +89,7 @@ node tools/verify-rpk-signature.cjs --band9 $rpk.FullName
 - [Vela设备通信](https://iot.mi.com/vela/quickapp/zh/features/network/interconnect.html)：双端包名、签名必须一致。
 
 原项目许可见根目录LICENSE，原始介绍和交接存档在`docs/upstream-*.md`。测试通知全部为虚构示例，不包含用户真实路线。
+
+## 7. 双通知选择回归测试（待本机 Gradle 验证）
+
+使用 `-Pband9 :app:testDebugUnitTest` 验证 `NavigationCandidateSelectorTest`，尤其“实时指令较早、普通持续导航通知较新”的场景，并在手机开启真实高德导航时核对 APK 诊断页。不要更改或上传用户实际路线信息，也不要把系统通知截图误当作 `Notification.extras` 的直接证明。

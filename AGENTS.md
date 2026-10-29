@@ -5,7 +5,7 @@
 ## 本次边界
 
 - 目标为小米手环 9 NFC 的基础骑行导航，不做地图、独立定位或新导航引擎。
-- 冻结 `android/app/src/**`：高德监听、解析、SendPolicy、WearBridge、后台服务及通信消息格式不改。`android/app/build.gradle` 只通过 `-Pband9` 选择独立包名/版本/签名，原 namespace 不改。
+- 高德解析器、SendPolicy、WearBridge、后台服务及通信消息格式保持冻结。仅允许 `NavigationNotificationListener.java` 调整多条高德通知的候选选择，使用纯 Java `NavigationCandidateSelector.java` 及单元测试；不得扩大到通知字段抓取、导航算法或额外权限。`android/app/build.gradle` 仍只通过 `-Pband9` 选择独立包名/版本/签名，原 namespace 不改。
 - `wearable/` 保留 9 Pro 原版对照。新目标是 `band9/`，不得把原版字体、设置页或多套箭头带入新 RPK。
 - `band9/src/common/protocol.js` 是上游逐字节副本，测试锁定其 Git blob SHA；不要为振动改协议。
 - 振动模块只读取已验证的消息。不得补造距离/方向，不得把传输 session 当作路线 ID，不得每条 seq 或心跳都振动。
