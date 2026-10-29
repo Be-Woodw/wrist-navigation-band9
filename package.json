@@ -2,16 +2,24 @@
   "name": "wrist-navigation-development",
   "private": true,
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/Gu-Mie/wrist-navigation.git" },
-  "engines": { "node": ">=22" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Be-Woodw/wrist-navigation-band9.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "doctor": "node tools/dev-doctor.cjs",
-    "test": "node --test wearable/test/*.test.js tools/test/*.test.cjs",
+    "test": "node --test wearable/test/*.test.js band9/test/*.test.js tools/test/*.test.cjs",
+    "test:band9": "node --test band9/test/*.test.js",
     "check:public": "node tools/check-public.cjs",
     "preview": "node tools/preview-wearable.cjs",
     "settings": "node tools/preview-settings.cjs",
     "dev": "node tools/preview-server.cjs",
     "deps:wearable": "npm --prefix wearable ci",
-    "build:wearable": "npm --prefix wearable run build"
+    "build:wearable": "npm --prefix wearable run build",
+    "deps:band9": "npm --prefix band9 ci",
+    "build:band9": "npm --prefix band9 run build"
   }
 }

@@ -1,0 +1,37 @@
+{
+  "package": "com.bewoodw.band9.navigation",
+  "name": "腕上导航9",
+  "icon": "/common/icon.png",
+  "versionName": "0.3.0",
+  "versionCode": 10,
+  "minAPILevel": 1,
+  "deviceTypeList": [
+    "watch"
+  ],
+  "features": [
+    {
+      "name": "system.interconnect"
+    },
+    {
+      "name": "system.brightness"
+    },
+    {
+      "name": "system.vibrator"
+    }
+  ],
+  "config": {
+    "designWidth": 192,
+    "logLevel": "error"
+  },
+  "display": {
+    "backgroundColor": "#000000"
+  },
+  "router": {
+    "entry": "pages/index",
+    "pages": {
+      "pages/index": {
+        "component": "index"
+      }
+    }
+  }
+}

@@ -3,8 +3,9 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-const Zip = require('../wearable/node_modules/adm-zip');
-const expectedCert = new crypto.X509Certificate(fs.readFileSync(require('node:path').join(__dirname, '../wearable/sign/debug/certificate.pem')));
+const target = process.argv.includes('--band9') ? 'band9' : 'wearable';
+const Zip = require('../' + target + '/node_modules/adm-zip');
+const expectedCert = new crypto.X509Certificate(fs.readFileSync(require('node:path').join(__dirname, '..', target, 'sign/debug/certificate.pem')));
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest();
 function reader(buffer) {
   let offset = 0;
@@ -70,8 +71,9 @@ function verify(buffer) {
   return zip;
 }
 if (require.main === module) {
-  assert.ok(process.argv.length > 2, 'Usage: node tools/verify-rpk-signature.cjs <rpk> ...');
-  for (const file of process.argv.slice(2)) {
+  const files = process.argv.slice(2).filter(arg => arg !== '--band9');
+  assert.ok(files.length, 'Usage: node tools/verify-rpk-signature.cjs [--band9] <rpk> ...');
+  for (const file of files) {
     const archive = verify(fs.readFileSync(file));
     const manifest = JSON.parse(archive.readAsText('manifest.json'));
     console.log(file + ': ZIP CRC, signed content, shared certificate and nested signature passed (' + manifest.versionName + ')');

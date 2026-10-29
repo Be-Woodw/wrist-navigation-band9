@@ -7,6 +7,7 @@
 android/local.properties
 signing/
 wearable/sign/
+band9/sign/
 outputs/
 .temp_*/
 *.log

@@ -1,0 +1,180 @@
+<template>
+  <div class="page">
+    <div class="status">
+      <text for="{{ statusLines }}" class="status-row">{{ $item }}</text>
+    </div>
+    <image if="{{ guidance }}" class="arrow" src="{{ arrow }}"></image>
+    <text if="{{ guidance }}" class="distance" style="font-size: {{ distanceSize }}px;">{{ distance }}</text>
+    <text if="{{ guidance }}" class="unit">{{ unit }}</text>
+    <div if="{{ guidance }}" class="instruction">
+      <text for="{{ instructionLines }}" class="instruction-row">{{ $item }}</text>
+    </div>
+    <list class="details" style="top: {{ guidance ? 336 : 160 }}px; height: {{ guidance ? 120 : 260 }}px;">
+      <list-item for="{{ detailLines }}" type="detail" class="detail-row">
+        <text class="detail-text">{{ $item }}</text>
+      </list-item>
+    </list>
+  </div>
+</template>
+<script>
+const protocol = require('../../common/protocol')
+const presentation = require('../../common/presentation')
+const vibration = require('../../common/vibration')
+let connection = null, latest = null, receivedAt = 0
+let connected = false, alive = false, visible = false, lifetime = 0
+let timer = null, player = null, policy = null
+let connectionError = '', screenError = '', screenRequested = false, screenRevision = 0
+
+export default {
+  private: {
+    guidance: false, demo: false, statusLines: ['等待连接'],
+    arrow: '/common/arrows/unknown.png', distance: '', unit: '', distanceSize: 42,
+    instructionLines: [], detailLines: ['请连接小米运动健康']
+  },
+  onInit() {
+    lifetime++
+    if (player) player.dispose()
+    if (timer) clearTimeout(timer)
+    connection = null; latest = null; receivedAt = 0
+    connected = false; visible = false; alive = true
+    timer = null; connectionError = ''; screenError = ''; screenRequested = false
+    screenRevision++
+    policy = vibration.createPolicy()
+    player = vibration.createPlayer(mode => {
+      const vibrator = require('@system.vibrator')
+      vibrator.vibrate({ mode })
+    }, setTimeout, clearTimeout, () => alive && visible && connected && !!latest && latest.status === 'active' &&
+      Date.now() - receivedAt >= 0 && Date.now() - receivedAt < protocol.EXPIRY_MS)
+    this.paint()
+  },
+  onReady() { this.retry() },
+  onShow() { visible = true; this.paint(); if (connection) this.retry() },
+  onHide() {
+    visible = false
+    this.silence()
+    if (timer) clearTimeout(timer)
+    timer = null
+    this.keepScreenOn(false)
+  },
+  onDestroy() {
+    alive = false; visible = false; lifetime++
+    if (player) player.dispose()
+    player = null; policy = null
+    this.keepScreenOn(false, true)
+    if (timer) clearTimeout(timer)
+    timer = null
+    if (connection) {
+      try {
+        connection.onmessage = () => {}; connection.onopen = () => {}
+        connection.onclose = () => {}; connection.onerror = () => {}
+      } catch (error) {}
+    }
+    connection = null; latest = null; connected = false
+  },
+  silence() { if (player) player.cancel(); if (policy) policy.suspend() },
+  send(message) {
+    if (!alive || !connection) return
+    const epoch = lifetime
+    try {
+      connection.send({ data: JSON.stringify(message), fail: () => { if (epoch === lifetime) this.failed('互联发送失败') } })
+    } catch (error) { this.failed('互联发送失败') }
+  },
+  failed(message) {
+    if (!alive) return
+    connected = false; connectionError = message
+    this.silence(); this.paint()
+  },
+  receive(event) {
+    if (!alive) return
+    const packet = protocol.decode(event && event.data)
+    if (!protocol.accept(latest, packet)) return
+    latest = packet; receivedAt = Date.now(); connected = true; connectionError = ''
+    // Keep rendering/ACK independent of haptics. A failing vibrator is non-fatal.
+    let alert = null
+    try { alert = policy.observe(packet, receivedAt, visible) } catch (error) {}
+    if (packet.status !== 'active' && player) player.cancel()
+    if (visible) this.paint()
+    this.send({ v: 1, type: 'ack', session: packet.session, seq: packet.seq })
+    if (alert && player) {
+      // Ending is also a real event; its single pulse must not rely on active-state guard.
+      if (alert.kind === 'ended' && alive && visible && connected) {
+        try { require('@system.vibrator').vibrate({ mode: 'short' }) } catch (error) {}
+      } else { player.play(alert) }
+    }
+  },
+  retry() {
+    if (!alive) return
+    connectionError = ''
+    const epoch = lifetime
+    try {
+      if (!connection) {
+        connection = require('@system.interconnect').instance()
+        connection.onopen = () => {
+          if (!alive || epoch !== lifetime) return
+          connected = true; connectionError = ''
+          this.send({ v: 1, type: 'ready' }); this.paint()
+        }
+        connection.onclose = () => { if (epoch === lifetime) this.failed('连接已断开') }
+        connection.onerror = () => { if (epoch === lifetime) this.failed('连接不可用') }
+        connection.onmessage = event => { if (epoch === lifetime) this.receive(event) }
+      }
+      connection.getReadyState({
+        success: data => {
+          if (!alive || epoch !== lifetime) return
+          connected = !!data && data.status === 1
+          if (connected) this.send({ v: 1, type: 'ready' })
+          else this.silence()
+          this.paint()
+        },
+        fail: () => { if (epoch === lifetime) this.failed('连接检查失败') }
+      })
+    } catch (error) { connection = null; this.failed('互联初始化失败') }
+    this.paint()
+  },
+  keepScreenOn(value, force) {
+    if (!force && screenRequested === value) return
+    screenRequested = value; screenError = ''
+    const revision = ++screenRevision
+    const fail = () => {
+      if (!alive || revision !== screenRevision) return
+      screenError = value ? '常亮开启失败' : '常亮关闭失败'
+      this.paint()
+    }
+    try { require('@system.brightness').setKeepScreenOn({ keepScreenOn: value, fail }) }
+    catch (error) { fail() }
+  },
+  paint() {
+    if (!alive) return
+    const age = Date.now() - receivedAt
+    const view = protocol.present(latest, age, connected)
+    if (connectionError) { view.status = connectionError; view.live = false; view.rawText = '' }
+    this.keepScreenOn(visible && view.live && !!latest && latest.keepScreenOn !== false)
+    if (!view.live && latest && latest.status !== 'ended') this.silence()
+    if (timer) clearTimeout(timer)
+    timer = null
+    if (visible && connected && latest && (latest.status === 'active' || latest.status === 'demo') && age >= 0 && age < protocol.EXPIRY_MS) {
+      const epoch = lifetime
+      timer = setTimeout(() => { if (epoch === lifetime) { timer = null; this.paint() } }, protocol.EXPIRY_MS - age)
+    }
+    const next = presentation.project(view, screenError)
+    for (const field of Object.keys(next)) {
+      if (Array.isArray(next[field])) {
+        if (next[field].join('\n') !== this[field].join('\n')) this[field] = next[field]
+      } else if (this[field] !== next[field]) this[field] = next[field]
+    }
+  }
+}
+</script>
+<style>
+.page { position: relative; width: 192px; height: 490px; background-color: #000000; }
+.status { position: absolute; left: 12px; top: 28px; width: 168px; height: 52px; flex-direction: column; }
+.status-row { width: 168px; height: 26px; line-height: 26px; font-size: 22px; color: #d8e4dc; text-align: center; }
+.arrow { position: absolute; left: 48px; top: 86px; width: 96px; height: 96px; object-fit: contain; }
+.distance { position: absolute; left: 12px; top: 194px; width: 168px; height: 56px; line-height: 56px; color: #ffffff; text-align: center; }
+.unit { position: absolute; left: 12px; top: 250px; width: 168px; height: 26px; line-height: 26px; font-size: 20px; color: #bdcec3; text-align: center; }
+.instruction { position: absolute; left: 12px; top: 278px; width: 168px; height: 56px; flex-direction: column; }
+.instruction-row { width: 168px; height: 28px; line-height: 28px; font-size: 22px; color: #ffffff; text-align: center; }
+.details { position: absolute; left: 12px; width: 168px; }
+.detail-row { width: 168px; height: 25px; flex-shrink: 0; }
+.detail-text { width: 168px; height: 25px; line-height: 25px; font-size: 18px; color: #aabdb0; text-align: center; }
+</style>
